@@ -75,6 +75,12 @@ defmodule Adbc.Statement.Test do
     {:ok, _stream, row_affected} = Statement.execute_query(statement)
     assert row_affected == -1
 
+    assert :ok == Statement.set_sql_query(statement, "SELECT * FROM foo")
+    assert :ok == Statement.prepare(statement)
+
+    {:ok, _stream, row_affected} = Statement.execute_query(statement)
+    assert row_affected == -1
+
     assert :ok == Statement.release(statement)
 
     assert :ok == Connection.release(connection)

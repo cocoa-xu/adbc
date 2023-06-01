@@ -1006,6 +1006,30 @@ static ERL_NIF_TERM adbc_statement_execute_query(ErlNifEnv *env, int argc, const
         return ret;
     }
 
+    printf("array_stream->val->get_schema: %p, val(%lld)\r\n", array_stream->val->get_schema, (uint64_t)array_stream->val);
+    if (array_stream->val->get_schema) {
+        struct ArrowSchema schema = { 0 };
+        array_stream->val->get_schema(array_stream->val, &schema);
+        printf("schema.format: %s\r\n", schema.format);
+        printf("schema.name: %s\r\n", schema.name);
+        printf("schema.metadata: %s\r\n", schema.metadata);
+        printf("schema.flags: %lld\r\n", schema.flags);
+        printf("schema.n_children: %lld\r\n", schema.n_children);
+
+        int idx = 0;
+        struct ArrowArray array = { 0 };
+        while (array_stream->val->get_next(array_stream->val, &array) == 0) {
+            printf("[%d] length: %ld\r\n", idx, array.length);
+            idx++;
+            if (array.release) {
+                array.release(&array);
+            } else {
+                break;
+            }
+            memset(&array, 0, sizeof(ArrowArray));
+        }
+    }
+
     ret = enif_make_resource(env, array_stream);
     enif_release_resource(array_stream);
     return enif_make_tuple3(env,
