@@ -51,6 +51,7 @@ jobs:
       - name: Compile and Test
         shell: bash
         run: |
+          vcpkg install sqlite3
           mix deps.get
           mix test || true
 
