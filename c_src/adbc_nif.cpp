@@ -1040,6 +1040,194 @@ static int on_load(ErlNifEnv *env, void **, ERL_NIF_TERM) {
     return 0;
 }
 
+static void release_malloced_type(struct ArrowSchema* schema) {
+   int i;
+   for (i = 0; i < schema->n_children; ++i) {
+      struct ArrowSchema* child = schema->children[i];
+      if (child->release != NULL) {
+         child->release(child);
+      }
+   }
+   free(schema->children);
+   // Mark released
+   schema->release = NULL;
+}
+
+static ERL_NIF_TERM export_float32_utf8_type(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+    ERL_NIF_TERM error{};
+    using schema_type = NifRes<struct ArrowSchema>;
+
+    schema_type * schema = nullptr;
+    if ((schema = schema_type::allocate_resource(env, error)) == nullptr) {
+        return error;
+    }
+
+    struct ArrowSchema* child;
+
+    //
+    // Initialize parent type
+    //
+    schema->val = (struct ArrowSchema) {
+        // Type description
+        .format = "+s",
+        .name = "",
+        .metadata = NULL,
+        .flags = 0,
+        .n_children = 2,
+        .dictionary = NULL,
+        // Bookkeeping
+        .release = &release_malloced_type
+    };
+    // Allocate list of children types
+    schema->val.children = (decltype(schema->val.children))malloc(sizeof(struct ArrowSchema*) * schema->val.n_children);
+
+    //
+    // Initialize child type #0
+    //
+    child = schema->val.children[0] = (struct ArrowSchema*)malloc(sizeof(struct ArrowSchema));
+    *child = (struct ArrowSchema) {
+        // Type description
+        .format = "f",
+        .name = "floats",
+        .metadata = NULL,
+        .flags = ARROW_FLAG_NULLABLE,
+        .n_children = 0,
+        .dictionary = NULL,
+        .children = NULL,
+        // Bookkeeping
+        .release = &release_malloced_type
+    };
+
+    //
+    // Initialize child type #1
+    //
+    child = schema->val.children[1] = (struct ArrowSchema*)malloc(sizeof(struct ArrowSchema));
+    *child = (struct ArrowSchema) {
+        // Type description
+        .format = "u",
+        .name = "strings",
+        .metadata = NULL,
+        .flags = ARROW_FLAG_NULLABLE,
+        .n_children = 0,
+        .dictionary = NULL,
+        .children = NULL,
+        // Bookkeeping
+        .release = &release_malloced_type
+    };
+
+    ERL_NIF_TERM ret = enif_make_resource(env, schema);
+    enif_release_resource(schema);
+    return erlang::nif::ok(env, ret);
+}
+
+static void release_malloced_array(struct ArrowArray* array) {
+    int i;
+    // Free children
+    for (i = 0; i < array->n_children; ++i) {
+        struct ArrowArray* child = array->children[i];
+        if (child->release != NULL) {
+            child->release(child);
+        }
+    }
+    free(array->children);
+    // Free buffers
+    for (i = 0; i < array->n_buffers; ++i) {
+        free((void *) array->buffers[i]);
+    }
+    free(array->buffers);
+    // Mark released
+    array->release = NULL;
+}
+
+static ERL_NIF_TERM export_float32_utf8_array(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]
+    //   int64_t nitems,
+    //   const uint8_t* float32_nulls, const float* float32_data,
+    //   const uint8_t* utf8_nulls, const int32_t* utf8_offsets, const uint8_t* utf8_data,
+) {
+    ERL_NIF_TERM error{};
+
+    int64_t nitems = 3;
+    const uint8_t float32_nulls[] = {0, 0, 0};
+    const float float32_data[] = {1.0, 2.0, 3.5};
+    const uint8_t utf8_nulls[] = {0, 0, 0};
+    const int32_t utf8_offsets[] = {0, 12, 22, 36};
+    const uint8_t utf8_data[] = "Hello World!From Adbc.Hope it works!";
+    using array_type = NifRes<struct ArrowArray>;
+
+    array_type * array = nullptr;
+    if ((array = array_type::allocate_resource(env, error)) == nullptr) {
+        return error;
+    }
+
+    struct ArrowArray* child;
+
+    //
+    // Initialize parent array
+    //
+    array->val = (struct ArrowArray) {
+        // Data description
+        .length = nitems,
+        .offset = 0,
+        .null_count = 0,
+        .n_buffers = 1,
+        .n_children = 2,
+        .dictionary = NULL,
+        // Bookkeeping
+        .release = &release_malloced_array
+    };
+    // Allocate list of parent buffers
+    array->val.buffers = (decltype(array->val.buffers))malloc(sizeof(void*) * array->val.n_buffers);
+    array->val.buffers[0] = NULL;  // no nulls, null bitmap can be omitted
+    // Allocate list of children arrays
+    array->val.children = (decltype(array->val.children))malloc(sizeof(struct ArrowArray*) * array->val.n_children);
+
+    //
+    // Initialize child array #0
+    //
+    child = array->val.children[0] = (struct ArrowArray *)malloc(sizeof(struct ArrowArray));
+    *child = (struct ArrowArray) {
+        // Data description
+        .length = nitems,
+        .offset = 0,
+        .null_count = -1,
+        .n_buffers = 2,
+        .n_children = 0,
+        .dictionary = NULL,
+        .children = NULL,
+        // Bookkeeping
+        .release = &release_malloced_array
+    };
+    child->buffers = (decltype(child->buffers))malloc(sizeof(void*) * array->val.n_buffers);
+    child->buffers[0] = float32_nulls;
+    child->buffers[1] = float32_data;
+
+    //
+    // Initialize child array #1
+    //
+    child = array->val.children[1] = (struct ArrowArray *)malloc(sizeof(struct ArrowArray));
+    *child = (struct ArrowArray) {
+        // Data description
+        .length = nitems,
+        .offset = 0,
+        .null_count = -1,
+        .n_buffers = 3,
+        .n_children = 0,
+        .dictionary = NULL,
+        .children = NULL,
+        // Bookkeeping
+        .release = &release_malloced_array
+    };
+    child->buffers = (decltype(child->buffers))malloc(sizeof(void*) * array->val.n_buffers);
+    child->buffers[0] = utf8_nulls;
+    child->buffers[1] = utf8_offsets;
+    child->buffers[2] = utf8_data;
+
+    ERL_NIF_TERM ret = enif_make_resource(env, array);
+    enif_release_resource(array);
+    return erlang::nif::ok(env, ret);
+}
+
 static int on_reload(ErlNifEnv *, void **, ERL_NIF_TERM) {
     return 0;
 }
@@ -1085,7 +1273,10 @@ static ErlNifFunc nif_functions[] = {
     {"adbc_error_reset", 1, adbc_error_reset, 0},
     {"adbc_error_to_term", 1, adbc_error_to_term, 0},
 
-    {"adbc_get_all_function_pointers", 0, adbc_get_all_function_pointers, 0}
+    {"adbc_get_all_function_pointers", 0, adbc_get_all_function_pointers, 0},
+
+    {"export_float32_utf8_type", 0, export_float32_utf8_type, 0},
+    {"export_float32_utf8_array", 0, export_float32_utf8_array, 0}
 };
 
 ERL_NIF_INIT(Elixir.Adbc.Nif, nif_functions, on_load, on_reload, on_upgrade, NULL);

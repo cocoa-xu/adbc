@@ -92,4 +92,7 @@ defmodule Adbc.Nif do
   def adbc_error_to_term(_error), do: :erlang.nif_error(:not_loaded)
 
   def adbc_get_all_function_pointers(), do: :erlang.nif_error(:not_loaded)
+
+  def export_float32_utf8_type(), do: :erlang.nif_error(:not_loaded)
+  def export_float32_utf8_array(), do: :erlang.nif_error(:not_loaded)
 end
