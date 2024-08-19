@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     env:
       MIX_ENV: prod
     strategy:
